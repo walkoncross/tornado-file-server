@@ -12,7 +12,7 @@ Then go to http://localhost:8888/jiffyclub/ to browse.
 Use the --port option to change the port on which the server listens.
 """
 
-from __future__ import print_function
+from __future__ import  # print_function
 
 import os
 import sys
@@ -33,18 +33,19 @@ class FileHandler(tornado.web.StaticFileHandler):
     '''
 
     def parse_url_path(self, url_path):
-        print("FileHandler.root: {}".format(self.root))
-        print("FileHandler.url_path: {}".format(url_path))
-        print("FileHandler.request.path: {}".format(self.request.path))
-        #print("self.request: {}".format(self.request))
+        #print("FileHandler.root: {}".format(self.root))
+        #print("FileHandler.url_path: {}".format(url_path))
+        #print("FileHandler.request.path: {}".format(self.request.path))
+        ##print("self.request: {}".format(self.request))
 
         if not url_path or url_path.endswith('/'):
             url_path = osp.join(self.root, '404.html')
 
         return url_path
 
+
 response_header = \
-'''
+    '''
 <meta http-equiv="Content-Type" content="text/html;charset=ISO-8859-1">
 <head>
 <style>
@@ -70,6 +71,7 @@ tr:nth-child(even) {
 </style>
 </head>
 '''
+
 
 class FolderHandler(tornado.web.RequestHandler):
     '''
@@ -99,30 +101,31 @@ class FolderHandler(tornado.web.RequestHandler):
         request_path = self.request.path
         full_url = self.request.full_url()
         work_dir = os.getcwd() + request_path
-        print("===>FolderHandler.request_path: {}".format(request_path))
-        print("===>FolderHandler.full_url: {}".format(full_url))
-        print("===>FolderHandler.work_dir: {}".format(work_dir))
+        #print("===>FolderHandler.request_path: {}".format(request_path))
+        #print("===>FolderHandler.full_url: {}".format(full_url))
+        #print("===>FolderHandler.work_dir: {}".format(work_dir))
 
-        if not self.request.path or self.request.path=='/':
+        if not self.request.path or self.request.path == '/':
             parent_url = full_url
         else:
             if full_url.endswith('/'):
                 parent_url = osp.dirname(full_url[:-1])
-            else:                
+            else:
                 parent_url = osp.dirname(full_url)
-        
+
         dir_list = os.listdir(work_dir)
         content = '<h1>Directory: {}</h1>'.format(request_path)
-        content += '<h4><a href="{}">Go to Parent Dir</a></h4>'.format(parent_url)
+        content += '<h4><a href="{}">Go to Parent Dir</a></h4>'.format(
+            parent_url)
         #content += '<h2>---------------------</h2>'
-        num  = len(dir_list)
+        num = len(dir_list)
         if num < 1:
             content += '<h4>Nothing under this directory</h4>'
-            print(content)
+            # print(content)
         else:
-            print("===>Found {} files/folders".format(num))
+            #print("===>Found {} files/folders".format(num))
             content_table = \
-'''<table style="width:100%;text-align: left">
+                '''<table style="width:100%;text-align: left">
   <tr>
     <th>Name</th> 
     <th>Type</th>
@@ -132,32 +135,32 @@ class FolderHandler(tornado.web.RequestHandler):
             i = 0
             for item in dir_list:
                 item_template = \
-'''
+                    '''
   <tr>
     <td><a href="{}">{}</a></td>
     <td>{}</td>
     <td>{}</td>
   </tr>
-'''             
-                
-                print('\n--->item {}'.format(i))
-                print('name: {}'.format(item))
+'''
+
+                #print('\n--->item {}'.format(i))
+                #print('name: {}'.format(item))
                 local_path = osp.join(work_dir, item)
-                print('local path: {}'.format(local_path))
+                #print('local path: {}'.format(local_path))
                 if osp.isdir(local_path):
-                    i+=1
+                    i += 1
 
                 modify_time = self.get_file_mtime(local_path)
-                print('modify time: {}'.format(modify_time))
+                #print('modify time: {}'.format(modify_time))
                 file_type = self.get_file_type(local_path)
-                print('file type: {}'.format(file_type))
+                #print('file type: {}'.format(file_type))
                 item_url = osp.join(full_url, item)
-                print('link url: {}'.format(item_url))
+                #print('link url: {}'.format(item_url))
                 #item_url = self.reverse_url(item)
                 content_table += item_template.format(item_url, item,
-                                                file_type, modify_time)
+                                                      file_type, modify_time)
 
-            content += "<h4>{} files, {} folders</h4>".format(num-i, i)
+            content += "<h4>{} files, {} folders</h4>".format(num - i, i)
             content += content_table
 
         self.write(response_header + content)
@@ -187,7 +190,7 @@ class Folder_matcher(Matcher):
 #    else:
 #        path = '/(.*)'
 #
-#    print("os.getcwd() = : {}".format(os.getcwd()))
+#    #print("os.getcwd() = : {}".format(os.getcwd()))
 #    application = tornado.web.Application([
 #        (path, FileHandler, {'path': os.getcwd()}),
 #        (r"/content/(.*)", tornado.web.StaticFileHandler, {"path": os.getcwd()}),
@@ -261,10 +264,10 @@ def generate_404_html(save_dir):
 
 def main(args=None):
     args = parse_args(args)
-    print("args: {}".format(args))
+    #print("args: {}".format(args))
     os.chdir(args.dir)
     generate_404_html(args.dir)
-    print('Starting server on port {}'.format(args.port))
+    #print('Starting server on port {}'.format(args.port))
     start_server(prefix=args.prefix, port=args.port)
 
 

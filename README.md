@@ -1,5 +1,16 @@
 # Tornado File Server
-1. install tornado: pip install tornado>=4.5;
+1. install tornado: 
+```cmd
+pip install tornado>=4.5;
+```
+or just run ./install_tornado.sh
+
 2. git clone this repo;
-3. ./tornado_file_server.py --port 8888 _your_root_dir_
+
+3. start serving:
+```cmd
+./tornado_file_server.py --port 8888 _your_root_dir_
+```
+or just run ./run.sh
+
 4. In your internet browser, put: http://localhost/8888
