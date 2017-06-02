@@ -13,4 +13,4 @@ or just run ./install_tornado.sh
 ```
 or just run ./run.sh
 
-4. In your internet browser, put: http://localhost/8888
+4. In your internet browser, for local test, put: http://localhost/8888; for public url, put http://_your_binded_public_url_
