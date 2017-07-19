@@ -12,7 +12,7 @@ Then go to http://localhost:8888/jiffyclub/ to browse.
 Use the --port option to change the port on which the server listens.
 """
 
-from __future__ import  # print_function
+from __future__ import print_function
 
 import os
 import sys
@@ -97,6 +97,19 @@ class FolderHandler(tornado.web.RequestHandler):
 
         return ftype
 
+    def get_file_size(self, path):
+        sz_unit = ['Byte', 'KB', 'MB', 'GB']
+        sz = float(osp.getsize(path))
+
+        unit_idx = 0
+        while (sz > 1024):
+            sz = sz / 1024
+            unit_idx += 1
+
+        sz_str = '%.3f %s' % (sz, sz_unit[unit_idx])
+
+        return sz_str
+
     def get(self, path):
         request_path = self.request.path
         full_url = self.request.full_url()
@@ -135,6 +148,7 @@ class FolderHandler(tornado.web.RequestHandler):
     <th>Name</th>
     <th>Type</th>
     <th>Modified Time</th>
+    <th>File Size</th>
   </tr>
 '''
             i = 0
@@ -143,6 +157,7 @@ class FolderHandler(tornado.web.RequestHandler):
                     '''
   <tr>
     <td><a href="{}">{}</a></td>
+    <td>{}</td>
     <td>{}</td>
     <td>{}</td>
   </tr>
@@ -159,11 +174,17 @@ class FolderHandler(tornado.web.RequestHandler):
                 #print('modify time: {}'.format(modify_time))
                 file_type = self.get_file_type(local_path)
                 #print('file type: {}'.format(file_type))
+                file_size = self.get_file_size(local_path)
+                #print('file size: {}'.format(file_size))
+
                 item_url = osp.join(full_url, item)
                 #print('link url: {}'.format(item_url))
                 #item_url = self.reverse_url(item)
                 content_table += item_template.format(item_url, item,
-                                                      file_type, modify_time)
+                                                      file_type,
+                                                      modify_time,
+                                                      file_size
+                                                      )
 
             content += "<h4>{} files, {} folders</h4>".format(num - i, i)
             content += content_table
