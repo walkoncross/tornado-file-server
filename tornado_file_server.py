@@ -114,6 +114,11 @@ class FolderHandler(tornado.web.RequestHandler):
                 parent_url = osp.dirname(full_url)
 
         dir_list = os.listdir(work_dir)
+
+        # os.listdir() returns a list in arbitray order on Linux filesystem
+        if sys.platform is not 'win32':
+            dir_list = sorted(dir_list, key=lambda s: s.lower())
+
         content = '<h1>Directory: {}</h1>'.format(request_path)
         content += '<h4><a href="{}">Go to Parent Dir</a></h4>'.format(
             parent_url)
@@ -127,7 +132,7 @@ class FolderHandler(tornado.web.RequestHandler):
             content_table = \
                 '''<table style="width:100%;text-align: left">
   <tr>
-    <th>Name</th> 
+    <th>Name</th>
     <th>Type</th>
     <th>Modified Time</th>
   </tr>
