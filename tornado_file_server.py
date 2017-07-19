@@ -99,14 +99,18 @@ class FolderHandler(tornado.web.RequestHandler):
 
     def get_file_size(self, path):
         sz_unit = ['Byte', 'KB', 'MB', 'GB']
-        sz = float(osp.getsize(path))
 
-        unit_idx = 0
-        while (sz > 1024):
-            sz = sz / 1024
-            unit_idx += 1
+        if osp.isfile(path):
+            sz = float(osp.getsize(path))
 
-        sz_str = '%.3f %s' % (sz, sz_unit[unit_idx])
+            unit_idx = 0
+            while (sz > 1024):
+                sz = sz / 1024
+                unit_idx += 1
+
+            sz_str = '%.3f %s' % (sz, sz_unit[unit_idx])
+        else:
+            sz_str = '-'
 
         return sz_str
 
