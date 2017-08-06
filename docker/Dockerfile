@@ -23,6 +23,7 @@ RUN pip install --upgrade pip
 RUN pip install -q tornado>=4.5
 
 WORKDIR /workspace/tornado-file-server
-RUN git clone --depth=1 https://github.com/walkoncross/tornado-file-server.git .
+RUN git clone --depth=1 https://github.com/walkoncross/tornado-file-server.git . && \
+    chmod +x run.sh 
 
 CMD ./run.sh
