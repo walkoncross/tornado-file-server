@@ -23,7 +23,8 @@ RUN pip install --upgrade pip
 RUN pip install tornado>=4.5
 
 WORKDIR /workspace/tornado-file-server
-RUN git clone --depth=1 https://github.com/walkoncross/tornado-file-server.git . && \
-    chmod +x run.sh 
+RUN git clone --depth=1 https://github.com/walkoncross/tornado-file-server.git . 
+RUN mv docker/entrypoint.sh ../ && \
+    chmod +x run.sh entrypoint.sh
 
-CMD ./run.sh
+ENTRYPOINT ['entrypoint.sh']
