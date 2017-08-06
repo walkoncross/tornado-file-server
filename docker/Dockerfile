@@ -26,4 +26,4 @@ WORKDIR /workspace/tornado-file-server
 RUN git clone --depth=1 https://github.com/walkoncross/tornado-file-server.git . 
 RUN chmod +x run.sh docker/entrypoint.sh
 
-ENTRYPOINT ['docker/entrypoint.sh']
+ENTRYPOINT ["docker/entrypoint.sh"]
