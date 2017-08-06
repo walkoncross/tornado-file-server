@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --upgrade pip
 
 # install tornado
-RUN pip install -q tornado>=4.5
+RUN pip install tornado>=4.5
 
 WORKDIR /workspace/tornado-file-server
 RUN git clone --depth=1 https://github.com/walkoncross/tornado-file-server.git . && \
