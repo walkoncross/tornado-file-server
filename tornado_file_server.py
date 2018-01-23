@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
+author: zhaoyafei0210@gmail.com
+github: https://github.com/walkoncross/tornado-file-server
+
 Starts a Tornado static file/folder  server in a given directory.
 To start the server in the current directory:
-    tornado-file-server .
+    tornado-file-server ./
 Then go to http://localhost:8888 to browse the directory.
 Use the --prefix option to add a prefix to the served URL,
 for example to match GitHub Pages' URL scheme:
-    tornado-file-server . --prefix=jiffyclub
-Then go to http://localhost:8888/jiffyclub/ to browse.
+    tornado-file-server . --prefix=www
+Then go to http://localhost:8888/www/ to browse.
 Use the --port option to change the port on which the server listens.
 """
 
@@ -21,10 +24,28 @@ import os.path as osp
 
 from argparse import ArgumentParser
 
-from tornado.routing import Router, Rule, Matcher, RuleRouter, PathMatches
+from tornado.routing import Rule, Matcher, RuleRouter, PathMatches
 from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
 import tornado.web
+
+from tornado.escape import url_escape, url_unescape
+
+
+def parse_args(args=None):
+    parser = ArgumentParser(
+        description=(
+            'Start a Tornado server to serve static files and folders out of a '
+            'given directory and with a given prefix.'))
+    parser.add_argument(
+        '-f', '--prefix', type=str, default='',
+        help='A prefix to add to the location from which pages are served.')
+    parser.add_argument(
+        '-p', '--port', type=int, default=8888,
+        help='Port on which to run server.')
+    parser.add_argument(
+        'dir', help='Directory from which to serve files.')
+    return parser.parse_args(args)
 
 
 class FileHandler(tornado.web.StaticFileHandler):
@@ -41,11 +62,13 @@ class FileHandler(tornado.web.StaticFileHandler):
         if not url_path or url_path.endswith('/'):
             url_path = osp.join(self.root, '404.html')
 
+        if os.path.sep != "/":
+            url_path = url_path.replace("/", os.path.sep)
+
         return url_path
 
 
-response_header = \
-    '''
+response_header = '''
 <meta http-equiv="Content-Type" content="text/html;charset=ISO-8859-1">
 <head>
 <style>
@@ -70,6 +93,29 @@ tr:nth-child(even) {
 }
 </style>
 </head>
+'''
+
+content_table_header = '''
+<table style="width:100%;text-align: left">
+  <tr>
+    <th>Name</th>
+    <th>Type</th>
+    <th>Modified Time</th>
+    <th>File Size</th>
+  </tr>
+'''
+
+content_table_item_template = '''
+  <tr>
+    <td><a href="{}">{}</a></td>
+    <td>{}</td>
+    <td>{}</td>
+    <td>{}</td>
+  </tr>
+'''
+
+content_table_footer = '''
+</table>
 '''
 
 
@@ -115,12 +161,22 @@ class FolderHandler(tornado.web.RequestHandler):
         return sz_str
 
     def get(self, path):
-        request_path = self.request.path
+        # print('type(self.request.uri): ', type(self.request.uri))
+        # print('===> self.request.uri: ', self.request.uri)
+        # print('===> self.request.path: ', self.request.path)
+
+        # unquote quoted self.request.path into local path
+        # e.g. "%20" into " "
+        local_path = url_unescape(self.request.path, plus=False)
+        # print('===> type(local_path): ', type(local_path))
+        # print('===> local local_path: ', local_path)
         full_url = self.request.full_url()
-        work_dir = os.getcwd() + request_path
-        #print("===>FolderHandler.request_path: {}".format(request_path))
+
+        # use unicode to deal with Chinese characters
+        full_local_path = unicode(os.getcwd()) + local_path
+        #print("===>FolderHandler.local_path: {}".format(local_path))
         #print("===>FolderHandler.full_url: {}".format(full_url))
-        #print("===>FolderHandler.work_dir: {}".format(work_dir))
+        #print("===>FolderHandler.full_local_path: {}".format(full_local_path))
 
         if not self.request.path or self.request.path == '/':
             parent_url = full_url
@@ -130,13 +186,13 @@ class FolderHandler(tornado.web.RequestHandler):
             else:
                 parent_url = osp.dirname(full_url)
 
-        dir_list = os.listdir(work_dir)
+        dir_list = os.listdir(full_local_path)
 
         # os.listdir() returns a list in arbitray order on Linux filesystem
         if sys.platform is not 'win32':
             dir_list = sorted(dir_list, key=lambda s: s.lower())
 
-        content = '<h1>Directory: {}</h1>'.format(request_path)
+        content = '<h1>Directory: {}</h1>'.format(local_path)
         content += '<h4><a href="{}">Go to Parent Dir</a></h4>'.format(
             parent_url)
         #content += '<h2>---------------------</h2>'
@@ -146,51 +202,40 @@ class FolderHandler(tornado.web.RequestHandler):
             # print(content)
         else:
             #print("===>Found {} files/folders".format(num))
-            content_table = \
-                '''<table style="width:100%;text-align: left">
-  <tr>
-    <th>Name</th>
-    <th>Type</th>
-    <th>Modified Time</th>
-    <th>File Size</th>
-  </tr>
-'''
-            i = 0
-            for item in dir_list:
-                item_template = \
-                    '''
-  <tr>
-    <td><a href="{}">{}</a></td>
-    <td>{}</td>
-    <td>{}</td>
-    <td>{}</td>
-  </tr>
-'''
+            content_table = content_table_header
 
-                #print('\n--->item {}'.format(i))
-                #print('name: {}'.format(item))
-                local_path = osp.join(work_dir, item)
-                #print('local path: {}'.format(local_path))
-                if osp.isdir(local_path):
-                    i += 1
+            sub_folder_cnt = 0
+            for i, item in enumerate(dir_list):
+                # print('\n--->item {}'.format(i))
+                # print('type(item): ', type(item))
+                # print(u'name:', item)
+                item_local_path = osp.join(full_local_path, item)
+                # print(u'item local path:', item_local_path)
+                if osp.isdir(item_local_path):
+                    sub_folder_cnt += 1
 
-                modify_time = self.get_file_mtime(local_path)
+                modify_time = self.get_file_mtime(item_local_path)
                 #print('modify time: {}'.format(modify_time))
-                file_type = self.get_file_type(local_path)
+                file_type = self.get_file_type(item_local_path)
                 #print('file type: {}'.format(file_type))
-                file_size = self.get_file_size(local_path)
+                file_size = self.get_file_size(item_local_path)
                 #print('file size: {}'.format(file_size))
 
-                item_url = osp.join(full_url, item)
-                #print('link url: {}'.format(item_url))
-                #item_url = self.reverse_url(item)
-                content_table += item_template.format(item_url, item,
-                                                      file_type,
-                                                      modify_time,
-                                                      file_size
-                                                      )
+                item_utf = item.encode('utf-8')
 
-            content += "<h4>{} files, {} folders</h4>".format(num - i, i)
+                item_url = url_escape(item_utf, plus=False)
+                item_url = osp.join(full_url, item_utf)
+                # print('===> link url: {}'.format(item_url))
+                #item_url = self.reverse_url(item)
+                content_table += content_table_item_template.format(item_url, item_utf,
+                                                                    file_type,
+                                                                    modify_time,
+                                                                    file_size
+                                                                    )
+
+            content += "<h4>{} files, {} folders</h4>".format(
+                num - sub_folder_cnt, sub_folder_cnt)
+            content_table += content_table_footer
             content += content_table
 
         self.write(response_header + content)
@@ -198,8 +243,10 @@ class FolderHandler(tornado.web.RequestHandler):
 
 class File_matcher(Matcher):
     def match(self, request):
-        work_dir = os.getcwd() + request.path
-        if osp.isfile(work_dir):
+        full_local_path = unicode(
+            os.getcwd()) + url_unescape(request.path, plus=False)
+        # print(u'full_local_path in File_matcher:', full_local_path)
+        if osp.isfile(full_local_path):
             return {}
         else:
             return None
@@ -207,8 +254,10 @@ class File_matcher(Matcher):
 
 class Folder_matcher(Matcher):
     def match(self, request):
-        work_dir = os.getcwd() + request.path
-        if osp.isdir(work_dir):
+        full_local_path = unicode(
+            os.getcwd()) + url_unescape(request.path, plus=False)
+        # print(u'full_local_path in Folder_matcher:', full_local_path)
+        if osp.isdir(full_local_path):
             return {}
         else:
             return None
@@ -262,22 +311,6 @@ def start_server(prefix='', port=8888):
     IOLoop.current().start()
 
 
-def parse_args(args=None):
-    parser = ArgumentParser(
-        description=(
-            'Start a Tornado server to serve static files and folders out of a '
-            'given directory and with a given prefix.'))
-    parser.add_argument(
-        '-f', '--prefix', type=str, default='',
-        help='A prefix to add to the location from which pages are served.')
-    parser.add_argument(
-        '-p', '--port', type=int, default=8888,
-        help='Port on which to run server.')
-    parser.add_argument(
-        'dir', help='Directory from which to serve files.')
-    return parser.parse_args(args)
-
-
 def generate_404_html(save_dir):
     content = \
         '''<!DOCTYPE html>
@@ -294,8 +327,9 @@ def generate_404_html(save_dir):
 
 def main(args=None):
     args = parse_args(args)
-    #print("args: {}".format(args))
+    print("args: {}".format(args))
     os.chdir(args.dir)
+    print('===> Current Working Dir: ', os.getcwd())
     generate_404_html(args.dir)
     #print('Starting server on port {}'.format(args.port))
     start_server(prefix=args.prefix, port=args.port)
