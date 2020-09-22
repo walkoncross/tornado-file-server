@@ -145,19 +145,19 @@ folder_content_navi_parent_template = '''
 '''
 
 folder_content_navi_prev_nohref = '''
-   &lt;Prev page
+   &lt;Prev
 '''
 
 folder_content_navi_next_nohref = '''
-   Next page&gt;
+   Next&gt;
 '''
 
 folder_content_navi_prev_template = '''
-   <a href="{}">&lt;Prev page</a>  
+   <a href="{}">&lt;Prev</a>  
 '''
 
 folder_content_navi_next_template = '''
-    <a href="{}">Next page &gt;</a>
+    <a href="{}">Next &gt;</a>
 '''
 
 folder_content_upload_form = '''
