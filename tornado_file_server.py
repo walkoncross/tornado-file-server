@@ -28,41 +28,43 @@ import sys
 import time
 import os.path as osp
 
+import math
 from argparse import ArgumentParser
 
-from tornado.routing import Rule, Matcher, RuleRouter, PathMatches
-from tornado.httpserver import HTTPServer
+import tornado.routing
+import tornado.httpserver
 import tornado.ioloop
-# from tornado.ioloop import IOLoop
 import tornado.web
-from tornado import options
+import tornado.escape
+import tornado.options
 
-from tornado.escape import url_escape, url_unescape
+from tornado.options import define, options
 
 # if sys.version.startswith('3.'):
 #     from builtins import str as unicode
 
 
-# save_dir = './uploaded_files'
-# if not osp.isdir(save_dir):
-#     os.makedirs(save_dir)
+def define_options():
+    define("port", type=int, default=8888, help="Port to listen on")
+    define("dir", type=str, default='./',
+           help="Directory from which to serve files.")
+    define("max_items", type=int, default=50,
+           help="Max items to show as in each page.")
 
-logging.basicConfig()
-
-def parse_args(args=None):
-    parser = ArgumentParser(
-        description=(
-            'Start a Tornado server to serve static files and folders out of a '
-            'given directory and with a given prefix.'))
-    parser.add_argument(
-        '-f', '--prefix', type=str, default='',
-        help='A prefix to add to the location from which pages are served.')
-    parser.add_argument(
-        '-p', '--port', type=int, default=8888,
-        help='Port on which to run server.')
-    parser.add_argument(
-        'dir', help='Directory from which to serve files.')
-    return parser.parse_args(args)
+# def parse_args(args=None):
+#     parser = ArgumentParser(
+#         description=(
+#             'Start a Tornado server to serve static files and folders out of a '
+#             'given directory and with a given prefix.'))
+#     parser.add_argument(
+#         '-f', '--prefix', type=str, default='',
+#         help='A prefix to add to the location from which pages are served.')
+#     parser.add_argument(
+#         '-p', '--port', type=int, default=8888,
+#         help='Port on which to run server.')
+#     parser.add_argument(
+#         'dir', help='Directory from which to serve files.')
+#     return parser.parse_args(args)
 
 
 content_404_html = '''
@@ -81,21 +83,23 @@ class FileHandler(tornado.web.StaticFileHandler):
     '''
 
     def parse_url_path(self, url_path):
-        #logging.info("FileHandler.root: {}".format(self.root))
-        #logging.info("FileHandler.url_path: {}".format(url_path))
-        #logging.info("FileHandler.request.path: {}".format(self.request.path))
-        ##logging.info("self.request: {}".format(self.request))
+        # logging.info('===> self.request.uri: {}'.format(self.request.uri))
+        # logging.info('===> self.request.path: {}'.format(self.request.path))
+        # logging.info('===> self.request.query: {}'.format(self.request.query))
+        # logging.info('===> self.request.headers: {}'.format(self.request.headers))
+        # logging.info('===> self.request.body: {}'.format(self.request.body))
+
         logging.info(
-            'GET ', url_path
+            'GET file path: {}'.format(url_path)
         )
 
         if not url_path or url_path.endswith('/'):
             logging.info(
-                'Cannot find: ', url_path
+                'Cannot find: {}'.format(url_path)
             )
             url_path = osp.join(self.root, '404.html')
             logging.info(
-                'Return: ', url_path
+                'Return: {}'.format(url_path)
             )
 
         if os.path.sep != "/":
@@ -104,75 +108,114 @@ class FileHandler(tornado.web.StaticFileHandler):
         return url_path
 
 
-response_header = '''
+folder_response_header = '''
 <meta http-equiv="Content-Type" content="text/html;charset=ISO-8859-1">
 <head>
-<style>
-h1, h2, h3, h4 {
-    font-family: arial, sans-serif;
-}
-
-table {
-    font-family: arial, sans-serif;
-    border-collapse: collapse;
-    width: 100%;
-}
-
-td, th {
-    border: 1px solid #dddddd;
-    text-align: left;
-    padding: 8px;
-}
-
-tr:nth-child(even) {
-    background-color: #dddddd;
-}
-</style>
+   <style>
+      h1, h2, h3, h4 {
+      font-family: arial, sans-serif;
+      }
+      table {
+      font-family: arial, sans-serif;
+      border-collapse: collapse;
+      width: 100%;
+      }
+      td, th {
+      border: 1px solid #dddddd;
+      text-align: left;
+      padding: 8px;
+      }
+      tr:nth-child(even) {
+      background-color: #dddddd;
+      }
+   </style>
 </head>
 '''
 
-content_navi_template = '''
-<h1>Directory: {}</h1>
-<h4><a href="{}">Go to Parent Dir</a></h4>
+folder_content_header_template = '''
+<header>
+   <h1>Directory: {}</h1>
+</header>
 '''
 
-content_upload_form = '''
+folder_content_navi_parent_template = '''
+<nav>
+   <h4><a href="{}">Go to Parent Dir</a></h4>
+</nav>   
+'''
+
+folder_content_navi_prev_nohref = '''
+   &lt;Prev page
+'''
+
+folder_content_navi_next_nohref = '''
+   Next page&gt;
+'''
+
+folder_content_navi_prev_template = '''
+   <a href="{}">&lt;Prev page</a>  
+'''
+
+folder_content_navi_next_template = '''
+    <a href="{}">Next page &gt;</a>
+'''
+
+folder_content_upload_form = '''
 <form method="post" enctype="multipart/form-data">
-  <div>
-    <label for="files">Choose files</label>
-    <input type="file" id="files" name="files" multiple>
-  </div>
-  <div>
-    <button>Upload</button>
-  </div>
+   <div>
+      <label for="files">Choose and upload files: </label>
+      </br>
+      <input type="file" id="files" name="files" multiple>
+      </br>
+      <button>Upload</button>
+   </div>
 </form>
 '''
 
-content_table_header = '''
-<table style="width:100%;text-align: left">
-  <tr>
-    <th>Name</th>
-    <th>Type</th>
-    <th>Modified Time</th>
-    <th>File Size</th>
-  </tr>
+folder_content_nothing_found = '''
+<h4>Nothing under this directory</h4>
 '''
 
-content_table_item_template = '''
-  <tr>
+folder_content_table_summary_template = '''
+<h4>{} items in total, {} files, {} folders</h4>
+<h4>show {} items per page, {} pages</h4>
+'''
+
+folder_content_table_header = '''
+<table style="width:100%;text-align: left">
+<tr>
+   <th>Name</th>
+   <th>Type</th>
+   <th>Modified Time</th>
+   <th>File Size</th>
+</tr>
+'''
+
+folder_content_table_item_template = '''
+<tr>
     <td><a href="{}">{}</a></td>
     <td>{}</td>
     <td>{}</td>
     <td>{}</td>
-  </tr>
+</tr>
 '''
 
-content_table_summary_template = '''
-<h4>{} files, {} folders</h4>
-'''
-
-content_table_footer = '''
+folder_content_table_footer = '''
 </table>
+'''
+
+folder_content_footer = '''
+<footer>
+  <p><a href="https://github.com/walkoncross/tornado-file-server">github repo</a></p>
+</footer>
+'''
+
+upload_response_content_header = '''
+<h4>OK</h4>
+'''
+
+upload_response_content_item_template = '''
+<p><em>{}</em> saved into: <em>{}</em></p>
 '''
 
 
@@ -180,6 +223,32 @@ class FolderHandler(tornado.web.RequestHandler):
     '''
     Request Handler to list a files under a directory
     '''
+
+    def initialize(self, max_items_per_page=50):
+        '''initialize
+        Refer to https://www.tornadoweb.org/en/stable/web.html:
+
+        classtornado.web.RequestHandler(...)[source]
+            Base class for HTTP request handlers.
+
+            Subclasses must define at least one of the methods defined in the “Entry points” section below.
+
+            Applications should not construct RequestHandler objects directly and subclasses should not override __init__ (override initialize instead).
+        '''
+        self.last_request_uri_path = ''
+        self.parent_uri_path = ''
+
+        self.local_dir_path = ''
+        self.dir_list = []
+        self.item_info_list = []
+
+        self.dir_list_len = 0
+        self.sub_folder_cnt = 0
+        
+        self.max_page_id = 1
+        self.max_items_per_page = max_items_per_page
+
+        # self.update_dir_info(self.local_dir_path)
 
     def get_file_mtime(self, path):
         mt = time.localtime(osp.getmtime(path))
@@ -217,91 +286,193 @@ class FolderHandler(tornado.web.RequestHandler):
 
         return sz_str
 
-    def get(self, path):
-        # logging.info('type(self.request.uri): ', type(self.request.uri))
-        # logging.info('===> self.request.uri: ', self.request.uri)
-        # logging.info('===> self.request.path: ', self.request.path)
-        logging.info(
-            'GET ', path
-        )
-
+    def update_dir_info(self):
         # unquote quoted self.request.path into local path
         # e.g. "%20" into " "
-        local_path = url_unescape(self.request.path, plus=False)
-        # logging.info('===> type(local_path): ', type(local_path))
-        # logging.info('===> local local_path: ', local_path)
-        full_url = self.request.full_url()
+        logging.info(
+            '===> Update folder dir_info: {}'.format(self.request.path)
+        )
+
+        self.local_dir_path = tornado.escape.url_unescape(
+            self.request.path, plus=False)
+
+        logging.info('===> local_dir_path: {}'.format(self.local_dir_path))
+
+        # full_url = self.request.full_url()
+        # logging.info('===> full_url: {}'.format(full_url))
 
         # use unicode to deal with Chinese characters
-        full_local_path = unicode(os.getcwd()) + local_path
-        #logging.info("===>FolderHandler.local_path: {}".format(local_path))
-        #logging.info("===>FolderHandler.full_url: {}".format(full_url))
-        #logging.info("===>FolderHandler.full_local_path: {}".format(full_local_path))
+        full_local_dir_path = unicode(os.getcwd()) + self.local_dir_path
+        #logging.info("===>full_local_dir_path: {}".format(full_local_dir_path))
 
         if not self.request.path or self.request.path == '/':
-            parent_url = full_url
+            self.parent_uri_path = self.request.path
         else:
-            if full_url.endswith('/'):
-                parent_url = osp.dirname(full_url[:-1])
+            if self.request.path.endswith('/'):
+                self.parent_uri_path = osp.dirname(self.request.path[:-1])
             else:
-                parent_url = osp.dirname(full_url)
+                self.parent_uri_path = osp.dirname(self.request.path)
 
-        dir_list = os.listdir(full_local_path)
-
+        self.dir_list = os.listdir(full_local_dir_path)
         # os.listdir() returns a list in arbitray order on Linux filesystem
+
         if sys.platform is not 'win32':
-            dir_list = sorted(dir_list, key=lambda s: s.lower())
+            self.dir_list = sorted(self.dir_list, key=lambda s: s.lower())
 
-        content = content_navi_template.format(local_path, parent_url)
-        content += content_upload_form
+        self.dir_list_len = len(self.dir_list)
+        self.item_info_list = []
+        self.max_page_id = 1
+        # self.last_request_uri_path = self.request.path
+        self.sub_folder_cnt = 0
 
-        #content += '<h2>---------------------</h2>'
-        num = len(dir_list)
-        if num < 1:
-            content += '<h4>Nothing under this directory</h4>'
-            # logging.info(content)
-        else:
-            #logging.info("===>Found {} files/folders".format(num))
-            content_table = content_table_header
+        if self.dir_list_len > 0:
+            #logging.info("===>Found {} files/folders".format(self.dir_list_len))
+            self.max_page_id = int(math.ceil(
+                self.dir_list_len / float(self.max_items_per_page)))
 
-            sub_folder_cnt = 0
-            for i, item in enumerate(dir_list):
-                # logging.info('\n--->item {}'.format(i))
-                # logging.info('type(item): ', type(item))
-                # logging.info(u'name:', item)
-                item_local_path = osp.join(full_local_path, item)
-                # logging.info(u'item local path:', item_local_path)
-                if osp.isdir(item_local_path):
-                    sub_folder_cnt += 1
+            for item in self.dir_list:
+                item_local_dir_path = osp.join(full_local_dir_path, item)
+                # logging.info(u'item local path:', item_local_dir_path)
+                if osp.isdir(item_local_dir_path):
+                    self.sub_folder_cnt += 1
 
-                modify_time = self.get_file_mtime(item_local_path)
+                modify_time = self.get_file_mtime(item_local_dir_path)
                 #logging.info('modify time: {}'.format(modify_time))
-                file_type = self.get_file_type(item_local_path)
+                file_type = self.get_file_type(item_local_dir_path)
                 #logging.info('file type: {}'.format(file_type))
-                file_size = self.get_file_size(item_local_path)
+                file_size = self.get_file_size(item_local_dir_path)
                 #logging.info('file size: {}'.format(file_size))
 
                 item_utf = item.encode('utf-8')
 
-                item_url = url_escape(item_utf, plus=False)
-                item_url = osp.join(full_url, item_utf)
+                item_url = tornado.escape.url_escape(item_utf, plus=False)
+                item_url = osp.join(self.request.path, item_utf)
                 # logging.info('===> link url: {}'.format(item_url))
                 #item_url = self.reverse_url(item)
-                content_table += content_table_item_template.format(item_url, item_utf,
-                                                                    file_type,
-                                                                    modify_time,
-                                                                    file_size
-                                                                    )
 
-            content += content_table_summary_template.format(
-                num - sub_folder_cnt, sub_folder_cnt)
-            content_table += content_table_footer
-            content += content_table
+                self.item_info_list.append(
+                    (item_url, item_utf, modify_time, file_type, file_size)
+                )
 
-        self.write(response_header + content)
+    def get(self, path):
+        # logging.info('===> self.path_args: {}'.format(self.path_args))
+        # logging.info('===> self.path_kwargs: {}'.format(self.path_kwargs))
+
+        # logging.info('===> self.request.uri: {}'.format(self.request.uri))
+        # logging.info('===> self.request.path: {}'.format(self.request.path))
+        # logging.info('===> self.request.query: {}'.format(self.request.query))
+        # logging.info('===> self.request.headers: {}'.format(self.request.headers))
+        # logging.info('===> self.request.body: {}'.format(self.request.body))
+
+        # if path is '':
+        #     path = '/'
+
+        logging.info(
+            'GET folder uri: {}'.format(self.request.uri)
+        )
+
+        if self.request.path != self.last_request_uri_path:
+            logging.info(
+                '===> Last request uri path: {}'.format(self.last_request_uri_path)
+            )
+            self.update_dir_info()
+
+        page_id = self.get_query_argument(name="page_id", default='1')
+
+        logging.info(
+            'page_id: {}'.format(page_id)
+        )
+
+        try:
+            page_id = int(page_id)
+        except:
+            page_id = 1
+
+        logging.info(
+            'max_page_id: {}'.format(self.max_page_id)
+        )
+
+        if page_id > self.max_page_id:
+            page_id = 1
+
+        logging.info(
+            'page_id after check: {}'.format(page_id)
+        )
+
+        content = folder_content_header_template.format(self.local_dir_path)
+        content += folder_content_navi_parent_template.format(self.parent_uri_path)
+        content += folder_content_upload_form
+
+        if self.dir_list_len < 1:
+            content += folder_content_nothing_found
+            # logging.info(content)
+        else:
+            content += folder_content_table_summary_template.format(
+                self.dir_list_len, 
+                self.dir_list_len - self.sub_folder_cnt, 
+                self. sub_folder_cnt,
+                self.max_items_per_page, 
+                self.max_page_id
+            )
+
+            prev_page_id = page_id-1
+            if prev_page_id < 1:
+                content += folder_content_navi_prev_nohref
+            else:
+                content += folder_content_navi_prev_template.format(
+                    path+'?page_id='+str(prev_page_id))
+
+            next_page_id = page_id+1
+            if next_page_id > self.max_page_id:
+                content += folder_content_navi_next_nohref
+            else:
+                content += folder_content_navi_next_template.format(
+                    path+'?page_id='+str(next_page_id))
+
+            #logging.info("===>Found {} files/folders".format(self.dir_list_len))
+            folder_content_table = folder_content_table_header
+
+            start_idx = self.max_items_per_page * (page_id-1)
+            end_idx = min(self.max_items_per_page * page_id, self.dir_list_len)
+
+            for i in range(start_idx, end_idx):
+                item_info = self.item_info_list[i]
+                # logging.info(
+                #     'item_info: {}'.format(item_info)
+                # )
+                folder_content_table += folder_content_table_item_template.format(
+                    item_info[0],
+                    item_info[1],
+                    item_info[2],
+                    item_info[3],
+                    item_info[4]
+                )
+
+            folder_content_table += folder_content_table_footer
+            content += folder_content_table
+
+        # content = folder_content_navi_template.format(self.local_dir_path, parent_uri_path)
+        # content += folder_content_upload_form
+
+        content += folder_content_footer
+        self.write(folder_response_header + content)
+
+        self.last_request_uri_path = self.request.path
 
     def post(self, path):
-        response_content = "<h4>OK</h4>\n"
+        # logging.info('===> self.path_args: {}'.format(self.path_args))
+        # logging.info('===> self.path_kwargs: {}'.format(self.path_kwargs))
+
+        # logging.info('===> self.request.uri: {}'.format(self.request.uri))
+        # logging.info('===> self.request.path: {}'.format(self.request.path))
+        # logging.info('===> self.request.query: {}'.format(self.request.query))
+        # logging.info('===> self.request.headers: {}'.format(self.request.headers))
+        # logging.info('===> self.request.body: {}'.format(self.request.body))
+        logging.info(
+            'POST : {}'.format(self.request.uri)
+        )
+
+        response_content = upload_response_content_header
 
         for field_name, files in self.request.files.items():
             for info in files:
@@ -325,29 +496,30 @@ class FolderHandler(tornado.web.RequestHandler):
                 fp.write(body)
                 fp.close()
 
-                response_content += "<p><em>{}</em> saved into: <em>{}</em></p>\n".format(
+                response_content += upload_response_content_item_template.format(
                     filename, save_filename)
 
         self.write(response_content)
 
 
-class File_matcher(Matcher):
+class File_matcher(tornado.routing.Matcher):
     def match(self, request):
-        full_local_path = unicode(
-            os.getcwd()) + url_unescape(request.path, plus=False)
-        # logging.info(u'full_local_path in File_matcher:', full_local_path)
-        if osp.isfile(full_local_path):
+        full_local_dir_path = unicode(
+            os.getcwd()) + tornado.escape.url_unescape(request.path, plus=False)
+        # logging.info(u'full_local_dir_path in File_matcher:', full_local_dir_path)
+        if osp.isfile(full_local_dir_path):
             return {}
         else:
             return None
 
 
-class Folder_matcher(Matcher):
+class Folder_matcher(tornado.routing.Matcher):
     def match(self, request):
-        full_local_path = unicode(
-            os.getcwd()) + url_unescape(request.path, plus=False)
-        # logging.info(u'full_local_path in Folder_matcher:', full_local_path)
-        if osp.isdir(full_local_path):
+        full_local_dir_path = unicode(
+            os.getcwd()) + tornado.escape.url_unescape(request.path, plus=False)
+        # logging.info(
+        #     u'full_local_dir_path in Folder_matcher:{}'.format(full_local_dir_path))
+        if osp.isdir(full_local_dir_path):
             return {}
         else:
             return None
@@ -409,11 +581,8 @@ class Folder_matcher(Matcher):
 #    tornado.ioloop.IOLoop.instance().start()
 
 
-def start_server(prefix='', port=8888):
-    if prefix:
-        path = '/' + prefix + '/(.*)'
-    else:
-        path = '/(.*)'
+def start_server(port=8888, max_items=50):
+    path = '/(.*)'
 
     file_app = tornado.web.Application(
         [
@@ -424,10 +593,15 @@ def start_server(prefix='', port=8888):
 
     folder_app = tornado.web.Application(
         [
-            (path, FolderHandler),
+            (path, FolderHandler, {"max_items_per_page": max_items}),
         ],
         debug=True)
 
+    error_app = tornado.web.Application(
+        [
+            (path, tornado.web.ErrorHandler, {"status_code": 404}),
+        ],
+        debug=True)
     # post_app = tornado.web.Application(
     #     [
     #         (r"/post", POSTHandler),
@@ -435,19 +609,20 @@ def start_server(prefix='', port=8888):
     #     ]
     # )
 
-    router = RuleRouter([
-        Rule(File_matcher(), file_app),
-        Rule(Folder_matcher(), folder_app),
-        # Rule(PathMatches(r"/post"), post_app)
-        # Rule(PathMatches(path + r"/post"), post_app)
+    router = tornado.routing.RuleRouter([
+        tornado.routing.Rule(File_matcher(), file_app),
+        tornado.routing.Rule(Folder_matcher(), folder_app),
+        tornado.routing.Rule(tornado.routing.AnyMatches(), error_app),
+        # tornado.routing.Rule(tornado.routing.PathMatches(r"/post"), post_app)
+        # tornado.routing.Rule(tornado.routing.PathMatches(path + r"/post"), post_app)
     ])
 
-#    router = RuleRouter([
-#        Rule(PathMatches("/app1.*"), file_app),
-#        Rule(PathMatches("/app2.*"), folder_app)
+#    router = tornado.routing.RuleRouter([
+#        tornado.routing.Rule(tornado.routing.PathMatches("/app1.*"), file_app),
+#        tornado.routing.Rule(tornado.routing.PathMatches("/app2.*"), folder_app)
 #    ])
 
-    server = HTTPServer(router)
+    server = tornado.httpserver.HTTPServer(router)
     server.listen(port)
     tornado.ioloop.IOLoop.current().start()
 
@@ -459,13 +634,27 @@ def generate_404_html(save_dir):
 
 
 def main(args=None):
-    args = parse_args(args)
-    logging.info("===> args: {}".format(args))
-    os.chdir(args.dir)
-    logging.info('===> Current Working Dir: ', os.getcwd())
-    generate_404_html(args.dir)
-    #logging.info('Starting server on port {}'.format(args.port))
-    start_server(prefix=args.prefix, port=args.port)
+    # args = parse_args(args)
+
+    # logging.info("===> args: {}".format(args))
+    # os.chdir(args.dir)
+    # logging.info('===> Current Working Dir: ', os.getcwd())
+    # generate_404_html(args.dir)
+    # #logging.info('Starting server on port {}'.format(args.port))
+    # start_server(prefix=args.prefix, port=args.port)
+
+    define_options()
+    options.parse_command_line()
+
+    logging.info("===> args: {}".format(options))
+    os.chdir(options.dir)
+    logging.info('===> Current Working Dir: {}'.format(os.getcwd()))
+    generate_404_html(options.dir)
+
+    start_server(
+        port=options.port,
+        max_items=options.max_items
+    )
 
 
 if __name__ == '__main__':
