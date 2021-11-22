@@ -16,10 +16,26 @@ Use the --port option to change the port on which the server listens.
 """
 
 from __future__ import print_function
+from tornado.options import define, options
+import tornado.options
+import tornado.escape
+import tornado.web
+import tornado.ioloop
+import tornado.httpserver
+import tornado.routing
+from argparse import ArgumentParser
+import math
+import os.path as osp
+import time
+import os
+import logging
 import sys
+import socket
+
 
 def is_python3():
     return (sys.version_info.major > 2)
+
 
 if is_python3():
     from builtins import str as unicode
@@ -28,28 +44,8 @@ else:
     from urllib import unquote
 
 
-import logging
-
-import os
-import sys
-import time
-import os.path as osp
-
-import math
-from argparse import ArgumentParser
-
-import tornado.routing
-import tornado.httpserver
-import tornado.ioloop
-import tornado.web
-import tornado.escape
-import tornado.options
-
-from tornado.options import define, options
-
-
 # def define_options():
-#     define("port", type=int, default=8899, 
+#     define("port", type=int, default=8899,
 #         help="Port to listen on, default 8899")
 #     define("dir", type=str, default='./',
 #         help="Directory from which to serve files.")
@@ -65,28 +61,41 @@ def define_arg_parser(args=None):
     #     '-f', '--prefix', type=str, default='',
     #     help='A prefix to add to the location from which pages are served.')
     parser.add_argument(
-        'dir', 
-        type=unicode, default='./', 
-        nargs='?', 
+        'dir',
+        type=unicode, default='./',
+        nargs='?',
         help='(Optional) directory from which to serve files. Default: "./"'
     )
     parser.add_argument(
-        '-l', '--log', 
-        dest='log_path', type=unicode, default='./tornado-file-server.log', 
+        '-l', '--log',
+        dest='log_path', type=unicode, default='./tornado-file-server.log',
         help='log file path. Default: "./tornado-file-server.log"'
     )
     parser.add_argument(
-        '-p', '--port', 
+        '-p', '--port',
         dest='port', type=int, default=8899,
         help='port on which to run the file server. Default: 8899'
     )
     parser.add_argument(
-        '-m', "--max", 
+        '-m', "--max-items",
         dest='max_items', type=int, default=50,
         help="max items to show in each page. Default: 50"
     )
 
     return parser
+
+
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
 
 
 content_404_html = u'''
@@ -110,8 +119,9 @@ def get_full_local_path_for_url(uri_path, root_dir=None):
         root_dir = unicode(os.getcwd())
 
     if not isinstance(root_dir, unicode):
-        raise(AssertionError("In get_full_local_path_for_url: root_dir must be Unicode"))
-        
+        raise(AssertionError(
+            "In get_full_local_path_for_url: root_dir must be Unicode"))
+
     if uri_path == '/':
         full_local_path = root_dir
     else:
@@ -119,7 +129,7 @@ def get_full_local_path_for_url(uri_path, root_dir=None):
         # print('type(local_path): ', type(local_path))
         # print(local_path)
         # full_local_path = osp.join(root_dir, local_path) # Error: osp.join('/working/path/', '/static_file') = /static_file
-        full_local_path = root_dir + local_path 
+        full_local_path = root_dir + local_path
 
     return full_local_path
 
@@ -131,7 +141,8 @@ class TypeMatchesFile(tornado.routing.Matcher):
         self.root_dir = root_dir
 
     def match(self, request):
-        full_local_path = get_full_local_path_for_url(request.path, self.root_dir)
+        full_local_path = get_full_local_path_for_url(
+            request.path, self.root_dir)
 
         # logging.info(u'full_local_path in TypeMatchesFile:', full_local_path)
         if osp.isfile(full_local_path):
@@ -148,7 +159,8 @@ class TypeMatchesFolder(tornado.routing.Matcher):
         self.root_dir = root_dir
 
     def match(self, request):
-        full_local_path = get_full_local_path_for_url(request.path, self.root_dir)
+        full_local_path = get_full_local_path_for_url(
+            request.path, self.root_dir)
 
         # logging.info(
         #     u'full_local_path in TypeMatchesFolder:{}'.format(full_local_path))
@@ -336,7 +348,7 @@ class FolderHandler(tornado.web.RequestHandler):
 
         self.dir_list_len = 0
         self.sub_folder_cnt = 0
-        
+
         self.max_page_id = 1
         self.max_items_per_page = max_items_per_page
 
@@ -393,14 +405,15 @@ class FolderHandler(tornado.web.RequestHandler):
 
         if not self.request.path or self.request.path == '/':
             self.parent_uri_path = self.uri_path
-        else:            
+        else:
             if self.request.path.endswith('/'):
                 self.parent_uri_path = osp.dirname(self.request.path[:-1])
             else:
                 self.parent_uri_path = osp.dirname(self.request.path)
 
         # use unicode to deal with Chinese characters
-        full_local_path = get_full_local_path_for_url(self.uri_path, self.root_dir)
+        full_local_path = get_full_local_path_for_url(
+            self.uri_path, self.root_dir)
         #logging.info("===>full_local_path: {}".format(full_local_path))
         # print('--> full_local_path: ', full_local_path)
 
@@ -427,13 +440,14 @@ class FolderHandler(tornado.web.RequestHandler):
                 # print('--> type(item): ', type(item))
                 # print(item)
                 if not isinstance(item, unicode):
-                    raise(AssertionError("File name must can be encoded into Unicode"))
+                    raise(AssertionError(
+                        "File name must can be encoded into Unicode"))
 
                 item_name_utf = item
 
                 # if not is_python3():
                 #     item_name_utf = item.decode('utf-8') # convert to unicode
-                
+
                 # print('--> type(item_name_utf): ', type(item_name_utf))
                 # print(item_name_utf)
 
@@ -457,7 +471,8 @@ class FolderHandler(tornado.web.RequestHandler):
 
                 # print('--> type(self.request.path): ', type(self.request.path))
 
-                item_uri_path = tornado.escape.url_escape(item_name_utf, plus=True)
+                item_uri_path = tornado.escape.url_escape(
+                    item_name_utf, plus=True)
                 # print('--> type(item_uri_path): ', type(item_uri_path))
                 # print(item_uri_path)
                 # item_uri_path = item
@@ -474,7 +489,8 @@ class FolderHandler(tornado.web.RequestHandler):
                 #item_uri_path = self.reverse_url(item)
 
                 self.dir_item_info_list.append(
-                    (item_uri_path, item_name_utf, modify_time, file_type, file_size)
+                    (item_uri_path, item_name_utf,
+                     modify_time, file_type, file_size)
                 )
 
     def get(self, path):
@@ -496,11 +512,13 @@ class FolderHandler(tornado.web.RequestHandler):
 
         if self.request.path != self.last_request_uri_path:
             logging.info(
-                u'===> Last request uri path: {}'.format(self.last_request_uri_path)
+                u'===> Last request uri path: {}'.format(
+                    self.last_request_uri_path)
             )
             self.update_dir_item_info_list()
         else:
-            full_local_path = get_full_local_path_for_url(self.request.path, self.root_dir)
+            full_local_path = get_full_local_path_for_url(
+                self.request.path, self.root_dir)
             mtime = self.get_file_mtime(full_local_path)
 
             if mtime != self.last_folder_mtime:
@@ -528,8 +546,10 @@ class FolderHandler(tornado.web.RequestHandler):
             u'page_id after check: {}'.format(page_id)
         )
 
-        response_content = FolderHandler.response_content_header_template.format(tornado.escape.url_unescape(self.uri_path))
-        response_content += FolderHandler.response_content_navi_parent_template.format(self.parent_uri_path)
+        response_content = FolderHandler.response_content_header_template.format(
+            tornado.escape.url_unescape(self.uri_path))
+        response_content += FolderHandler.response_content_navi_parent_template.format(
+            self.parent_uri_path)
         response_content += FolderHandler.response_content_upload_form
 
         if self.dir_list_len < 1:
@@ -537,10 +557,10 @@ class FolderHandler(tornado.web.RequestHandler):
             # logging.info(response_content)
         else:
             response_content += FolderHandler.response_content_table_summary_template.format(
-                self.dir_list_len, 
-                self.dir_list_len - self.sub_folder_cnt, 
+                self.dir_list_len,
+                self.dir_list_len - self.sub_folder_cnt,
                 self. sub_folder_cnt,
-                self.max_items_per_page, 
+                self.max_items_per_page,
                 self.max_page_id
             )
 
@@ -550,16 +570,17 @@ class FolderHandler(tornado.web.RequestHandler):
                 content_navi += FolderHandler.response_content_navi_prev_nohref
             else:
                 content_navi += FolderHandler.response_content_navi_prev_template.format(
-                    path+'?page_id='+str(prev_page_id))
+                    self.request.path+'?page_id='+str(prev_page_id))
 
-            content_navi += FolderHandler.response_content_navi_up_template.format(self.parent_uri_path)
+            content_navi += FolderHandler.response_content_navi_up_template.format(
+                self.parent_uri_path)
 
             next_page_id = page_id+1
             if next_page_id > self.max_page_id:
                 content_navi += FolderHandler.response_content_navi_next_nohref
             else:
                 content_navi += FolderHandler.response_content_navi_next_template.format(
-                    path+'?page_id='+str(next_page_id))
+                    self.request.path+'?page_id='+str(next_page_id))
 
             response_content += content_navi
             #logging.info(u"===>Found {} files/folders".format(self.dir_list_len))
@@ -595,9 +616,9 @@ class FolderHandler(tornado.web.RequestHandler):
             FolderHandler.response_content_table += FolderHandler.response_content_table_footer
             response_content += FolderHandler.response_content_table
 
-        # response_content += FolderHandler.response_content_upload_form
-        if end_idx - start_idx >= 10:
-            response_content += content_navi
+            # response_content += FolderHandler.response_content_upload_form
+            if end_idx - start_idx >= 10:
+                response_content += content_navi
 
         response_content += FolderHandler.response_content_footer
 
@@ -620,13 +641,15 @@ class FolderHandler(tornado.web.RequestHandler):
 
         # print('path: ', path)
 
-        response_content = FolderHandler.upload_response_content_header.format(self.request.path)
-        full_local_path = get_full_local_path_for_url(self.request.path, self.root_dir)
+        response_content = FolderHandler.upload_response_content_header.format(
+            self.request.path)
+        full_local_path = get_full_local_path_for_url(
+            self.request.path, self.root_dir)
 
         for field_name, files in self.request.files.items():
             for info in files:
                 filename, content_type = info["filename"], info["content_type"]
-                
+
                 if not is_python3():
                     filename = filename.decode('utf-8')
 
@@ -636,7 +659,8 @@ class FolderHandler(tornado.web.RequestHandler):
                         body)
                 )
 
-                save_filename = osp.join(full_local_path, osp.basename(filename))
+                save_filename = osp.join(
+                    full_local_path, osp.basename(filename))
                 if osp.isfile(save_filename):
                     i = 0
                     fn, ext = osp.splitext(save_filename)
@@ -714,7 +738,15 @@ class FolderHandler(tornado.web.RequestHandler):
 def start_server(root_dir, port=8899, max_items=50):
     if not isinstance(root_dir, unicode):
         raise(AssertionError("In start_server: root_dir must be of type Unicode"))
-      
+
+    ip = get_ip()
+    server_url = u"{}:{}".format(ip, port)
+    print('===> tornado file server url: \n', server_url)
+
+    logging.info(
+        u'===> tornado file server url: {}'.format(server_url)
+    )
+    
     path = '/(.*)'
 
     file_app = tornado.web.Application(
@@ -726,7 +758,8 @@ def start_server(root_dir, port=8899, max_items=50):
 
     folder_app = tornado.web.Application(
         [
-            (path, FolderHandler, {"max_items_per_page": max_items, "root_dir": root_dir}),
+            (path, FolderHandler, {
+             "max_items_per_page": max_items, "root_dir": root_dir}),
         ],
         debug=True
     )
@@ -747,7 +780,8 @@ def start_server(root_dir, port=8899, max_items=50):
     router = tornado.routing.RuleRouter(
         [
             tornado.routing.Rule(TypeMatchesFile(root_dir=root_dir), file_app),
-            tornado.routing.Rule(TypeMatchesFolder(root_dir=root_dir), folder_app),
+            tornado.routing.Rule(TypeMatchesFolder(
+                root_dir=root_dir), folder_app),
             tornado.routing.Rule(tornado.routing.AnyMatches(), error_app),
             # tornado.routing.Rule(tornado.routing.PathMatches(r"/post"), post_app)
             # tornado.routing.Rule(tornado.routing.PathMatches(path + r"/post"), post_app)
@@ -770,13 +804,16 @@ def main():
     arg_parser = define_arg_parser()
     options = arg_parser.parse_args()
 
+    print(u'===> args: \n', options)
+
     # define_options()
     # options.parse_command_line()
 
     if not is_python3():
-        options.dir = options.dir.decode('utf-8') # convert into unicode
+        options.dir = options.dir.decode('utf-8')  # convert into unicode
 
-    logging.basicConfig(filename=options.log_path, encoding='utf-8', level=logging.INFO)
+    logging.basicConfig(filename=options.log_path,
+                        encoding='utf-8', level=logging.INFO)
 
     logging.info(u"===> args: {}".format(options))
     logging.info(u'===> Current Working Dir: {}'.format(options.dir))
