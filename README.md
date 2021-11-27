@@ -14,6 +14,6 @@ or just run ./install_tornado.sh
 ```cmd
 ./tornado_file_server.py -p  _your_root_dir_
 ```
-or just run ./run.sh
+or just run ./run_tornado_file_server.sh
 
 4. In your internet browser, for local test, put: http://localhost/8899; for public url, put http://_your_binded_public_url_

@@ -30,7 +30,7 @@ import time
 import os
 import logging
 import sys
-import socket
+from get_ip import get_ip
 
 
 def is_python3():
@@ -83,19 +83,6 @@ def define_arg_parser(args=None):
     )
 
     return parser
-
-
-def get_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        # doesn't even have to be reachable
-        s.connect(('10.255.255.255', 1))
-        IP = s.getsockname()[0]
-    except Exception:
-        IP = '127.0.0.1'
-    finally:
-        s.close()
-    return IP
 
 
 content_404_html = u'''
@@ -746,7 +733,7 @@ def start_server(root_dir, port=8899, max_items=50):
     logging.info(
         u'===> tornado file server url: {}'.format(server_url)
     )
-    
+
     path = '/(.*)'
 
     file_app = tornado.web.Application(
