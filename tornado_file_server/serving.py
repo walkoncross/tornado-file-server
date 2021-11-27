@@ -4,15 +4,13 @@
 author: zhaoyafei0210@gmail.com
 github: https://github.com/walkoncross/tornado-file-server
 
-Starts a Tornado static file/folder  server in a given directory.
+Starts a Tornado static file/folder server from a given directory.
 To start the server in the current directory:
     tornado-file-server ./
 Then go to http://localhost:8899 to browse the directory.
-Use the --prefix option to add a prefix to the served URL,
-for example to match GitHub Pages' URL scheme:
-    tornado-file-server . --prefix=www
-Then go to http://localhost:8899/www/ to browse.
+
 Use the --port option to change the port on which the server listens.
+    tornado-file-server --port 8899 ./
 """
 import logging
 from argparse import ArgumentParser
@@ -20,13 +18,9 @@ from .tornado_file_server import start_server, generate_404_html
 from .python_version import is_python3
 
 
-# def define_options():
-#     define("port", type=int, default=8899,
-#         help="Port to listen on, default 8899")
-#     define("dir", type=str, default='./',
-#         help="Directory from which to serve files.")
-#     define("max", type=int, default=50,
-#         help="Max items to show in each page.")
+if is_python3():
+    from builtins import str as unicode
+
 
 def define_arg_parser(args=None):
     parser = ArgumentParser(
