@@ -12,7 +12,7 @@ or just run ./install_tornado.sh
 
 3. start serving:
 ```cmd
-./tornado_file_server.py -p  _your_root_dir_
+python -m tornado_file_server.serving --port 8899 _your_root_dir_
 ```
 or just run ./run_tornado_file_server.sh
 
