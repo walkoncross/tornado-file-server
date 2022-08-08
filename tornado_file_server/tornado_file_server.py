@@ -48,12 +48,26 @@ content_404_html = u'''
 
 
 def generate_404_html(save_dir):
+    """Generate 404 page
+
+    Args:
+        save_dir (str): dir to save 404.html
+    """
     fp = open(osp.join(save_dir, '404.html'), 'w')
     fp.writelines(content_404_html)
     fp.close()
 
 
 def get_full_local_path_for_url(uri_path, root_dir=None):
+    """Get full local path for url_path
+
+    Args:
+        uri_path (str): uri path
+        root_dir (str, optional): local root dir. Defaults to None.
+
+    Returns:
+        str: full local path
+    """
     if not root_dir:
         root_dir = unicode(os.getcwd())
 
@@ -74,12 +88,26 @@ def get_full_local_path_for_url(uri_path, root_dir=None):
 
 
 class TypeMatchesFile(tornado.routing.Matcher):
-
+    """file type matcher
+    """
     def __init__(self, root_dir=None):
+        """_summary_
+
+        Args:
+            root_dir (str, optional): _description_. Defaults to None.
+        """
         super(TypeMatchesFile, self).__init__()
         self.root_dir = root_dir
 
     def match(self, request):
+        """_summary_
+
+        Args:
+            request (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         full_local_path = get_full_local_path_for_url(
             request.path, self.root_dir)
 
@@ -92,7 +120,8 @@ class TypeMatchesFile(tornado.routing.Matcher):
 
 
 class TypeMatchesFolder(tornado.routing.Matcher):
-
+    """folder type matcher
+    """
     def __init__(self, root_dir=None):
         super(TypeMatchesFolder, self).__init__()
         self.root_dir = root_dir
@@ -111,11 +140,18 @@ class TypeMatchesFolder(tornado.routing.Matcher):
 
 
 class FileHandler(tornado.web.StaticFileHandler):
-    '''
-    Static File Handler
-    '''
+    """Static File Handler
+    """
 
     def parse_url_path(self, url_path):
+        """parse url_path
+
+        Args:
+            url_path (str): _description_
+
+        Returns:
+            str: _description_
+        """
         # logging.info(u'===> self.request.uri: {}'.format(self.request.uri))
         # logging.info(u'===> self.request.path: {}'.format(self.request.path))
         # logging.info(u'===> self.request.query: {}'.format(self.request.query))
@@ -142,9 +178,8 @@ class FileHandler(tornado.web.StaticFileHandler):
 
 
 class FolderHandler(tornado.web.RequestHandler):
-    '''
-    Request Handler to list a files under a directory
-    '''
+    """Request Handler to list a files under a directory
+    """
 
     response_header = u'''
     <meta http-equiv="Content-Type" content="text/html;charset=ISO-8859-1">
@@ -262,7 +297,7 @@ class FolderHandler(tornado.web.RequestHandler):
     '''
 
     def initialize(self, max_items_per_page=50, root_dir=None):
-        '''initialize
+        """initialize
         Refer to https://www.tornadoweb.org/en/stable/web.html:
 
         classtornado.web.RequestHandler(...)[source]
@@ -271,7 +306,12 @@ class FolderHandler(tornado.web.RequestHandler):
             Subclasses must define at least one of the methods defined in the “Entry points” section below.
 
             Applications should not construct RequestHandler objects directly and subclasses should not override __init__ (override initialize instead).
-        '''
+
+
+        Args:
+            max_items_per_page (int, optional): _description_. Defaults to 50.
+            root_dir (str, optional): _description_. Defaults to None.
+        """
         self.last_request_uri_path = ''
         self.uri_path = '/'
         self.parent_uri_path = '/'
@@ -294,12 +334,28 @@ class FolderHandler(tornado.web.RequestHandler):
         self.update_dir_item_info_list()
 
     def get_file_mtime(self, path):
+        """get_file_mtime
+
+        Args:
+            path (str): file path
+
+        Returns:
+            str: description for file modified time
+        """
         mt = time.localtime(osp.getmtime(path))
         tm_str = time.strftime('%y-%m-%d %H:%M:%S', mt)
 
         return unicode(tm_str)
 
     def get_file_type(self, path):
+        """get_file_type
+
+        Args:
+            path (str): file path
+
+        Returns:
+            str: description for file type
+        """
         ftype = 'unknown'
         if osp.isdir(path):
             ftype = 'DIR'
@@ -313,6 +369,14 @@ class FolderHandler(tornado.web.RequestHandler):
         return unicode(ftype)
 
     def get_file_size(self, path):
+        """get_file_size
+
+        Args:
+            path (str): file path
+
+        Returns:
+            str: description for file size
+        """
         sz_unit = ['Byte', 'KB', 'MB', 'GB']
 
         if osp.isfile(path):
@@ -330,6 +394,8 @@ class FolderHandler(tornado.web.RequestHandler):
         return unicode(sz_str)
 
     def update_dir_item_info_list(self):
+        """update_dir_item_info_list
+        """
         # unquote quoted self.request.path into local path
         # e.g. "%20" into " "
         self.uri_path = self.request.path
@@ -433,6 +499,11 @@ class FolderHandler(tornado.web.RequestHandler):
                 )
 
     def get(self, path):
+        """get method
+
+        Args:
+            path (str): _description_
+        """
         # logging.info(u'===> self.path_args: {}'.format(self.path_args))
         # logging.info(u'===> self.path_kwargs: {}'.format(self.path_kwargs))
 
@@ -566,6 +637,11 @@ class FolderHandler(tornado.web.RequestHandler):
         self.write(FolderHandler.response_header + response_content)
 
     def post(self, path):
+        """post method
+
+        Args:
+            path (str): _description_
+        """
         # logging.info(u'===> self.path_args: {}'.format(self.path_args))
         # logging.info(u'===> self.path_kwargs: {}'.format(self.path_kwargs))
 
@@ -675,6 +751,13 @@ class FolderHandler(tornado.web.RequestHandler):
 
 
 def start_server(root_dir, port=8899, max_items=50):
+    """start_server
+
+    Args:
+        root_dir (str): root dir of file server
+        port (int, optional): address port. Defaults to 8899.
+        max_items (int, optional): max items per page. Defaults to 50.
+    """
     if not isinstance(root_dir, unicode):
         raise(AssertionError("In start_server: root_dir must be of type Unicode"))
 

@@ -10,4 +10,9 @@ import sys
 
 
 def is_python3():
+    """is_python3
+
+    Returns:
+        boo: is python3 or not
+    """
     return (sys.version_info.major > 2)

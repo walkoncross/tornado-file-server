@@ -11,6 +11,11 @@ import socket
 
 
 def get_ip():
+    """get ip of local host
+
+    Returns:
+        str: ip description string
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # doesn't even have to be reachable
