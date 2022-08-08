@@ -648,7 +648,7 @@ class FolderHandler(tornado.web.RequestHandler):
 
         table_row = ""
         items_per_row = self.items_per_row
-        print('items_per_row: ', items_per_row)
+        # print('items_per_row: ', items_per_row)
         add_row_header = True
         # add_row_footer = True
 
@@ -736,7 +736,6 @@ class FolderHandler(tornado.web.RequestHandler):
             add_row_header = True
 
             response_content_table += table_row
-
 
         response_content_table += FolderHandler.mp_response_content_table_footer
 
@@ -1032,10 +1031,10 @@ def start_server(
 
     ip = get_ip()
     server_url = u"{}:{}".format(ip, port)
-    print(u'===> tornado file server url: {} or localhost:{}'.format(server_url, port))
+    # print(u'===>start tornado file server at url: {} or localhost:{}'.format(server_url, port))
 
     logging.info(
-        u'===> tornado file server url: {} or localhost:{}'.format(server_url, port)
+        u'===> start tornado file server at url: {} or localhost:{}'.format(server_url, port)
     )
 
     path = '/(.*)'
