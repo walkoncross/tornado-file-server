@@ -10,7 +10,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 view_mode=preview
-port=8900
+port=8899
 items_per_page=50
 items_per_row=4
 image_width=256
