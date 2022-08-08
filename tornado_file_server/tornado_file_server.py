@@ -429,7 +429,7 @@ class FolderHandler(tornado.web.RequestHandler):
 
                 self.dir_item_info_list.append(
                     (item_uri_path, item_name_utf,
-                     modify_time, file_type, file_size)
+                     file_type, modify_time, file_size)
                 )
 
     def get(self, path):
@@ -523,7 +523,7 @@ class FolderHandler(tornado.web.RequestHandler):
 
             response_content += content_navi
             #logging.info(u"===>Found {} files/folders".format(self.dir_list_len))
-            FolderHandler.response_content_table = FolderHandler.response_content_table_header
+            response_content_table = FolderHandler.response_content_table_header
 
             start_idx = self.max_items_per_page * (page_id-1)
             end_idx = min(self.max_items_per_page * page_id, self.dir_list_len)
@@ -539,7 +539,7 @@ class FolderHandler(tornado.web.RequestHandler):
                 #     print('type:', type(info))
                 #     print(info)
 
-                FolderHandler.response_content_table += FolderHandler.response_content_table_item_template.format(
+                response_content_table += FolderHandler.response_content_table_item_template.format(
                     # unicode(item_info[0]),
                     # unicode(item_info[1]),
                     # unicode(item_info[2]),
@@ -552,8 +552,8 @@ class FolderHandler(tornado.web.RequestHandler):
                     item_info[4]
                 )
 
-            FolderHandler.response_content_table += FolderHandler.response_content_table_footer
-            response_content += FolderHandler.response_content_table
+            response_content_table += FolderHandler.response_content_table_footer
+            response_content += response_content_table
 
             # response_content += FolderHandler.response_content_upload_form
             if end_idx - start_idx >= 10:
