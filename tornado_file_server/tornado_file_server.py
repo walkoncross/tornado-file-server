@@ -16,6 +16,7 @@ import logging
 import sys
 import math
 
+from urllib.parse import urlencode
 
 # from tornado.options import define, options
 import tornado.options
@@ -28,6 +29,7 @@ import tornado.routing
 
 from .get_ip import get_ip
 from .python_version import is_python3
+from .check_file_types import is_an_image, is_supported_audio, is_supported_video
 
 
 if is_python3():
@@ -78,7 +80,7 @@ def get_full_local_path_for_url(uri_path, root_dir=None):
     if uri_path == '/':
         full_local_path = root_dir
     else:
-        local_path = tornado.escape.url_unescape(uri_path, plus=True)
+        local_path = tornado.escape.url_unescape(uri_path, plus=False)
         # print('type(local_path): ', type(local_path))
         # print(local_path)
         # full_local_path = osp.join(root_dir, local_path) # Error: osp.join('/working/path/', '/static_file') = /static_file
@@ -181,6 +183,8 @@ class FolderHandler(tornado.web.RequestHandler):
     """Request Handler to list a files under a directory
     """
 
+    view_mode_list = ['list', 'preview']
+
     response_header = u'''
     <meta http-equiv="Content-Type" content="text/html;charset=ISO-8859-1">
     <head>
@@ -205,6 +209,10 @@ class FolderHandler(tornado.web.RequestHandler):
     </head>
     '''
 
+    response_body_beginnings = u'''
+    <body>
+    '''
+    
     response_content_header_template = u'''
     <header>
     <h1>Directory: {}</h1>
@@ -215,6 +223,22 @@ class FolderHandler(tornado.web.RequestHandler):
     <nav>
     <h4><a href="{}">Go to Parent Dir</a></h4>
     </nav>   
+    '''
+    
+    response_content_view_mode_template = u'''
+    <h4>View Mode: {} mode (swith to <a href="{}">{}</a> mode)</h4>
+    '''
+
+    response_content_upload_form = u'''
+    <form method="post" enctype="multipart/form-data">
+    <div>
+        <label for="files">Choose and upload files: </label>
+        </br>
+        <input type="file" id="files" name="files" multiple>
+        </br>
+        <button>Upload</button>
+    </div>
+    </form>
     '''
 
     response_content_navi_prev_nohref = u'''
@@ -235,18 +259,6 @@ class FolderHandler(tornado.web.RequestHandler):
 
     response_content_navi_next_template = u'''
      <a href="{}">Next&gt;</a>
-    '''
-
-    response_content_upload_form = u'''
-    <form method="post" enctype="multipart/form-data">
-    <div>
-        <label for="files">Choose and upload files: </label>
-        </br>
-        <input type="file" id="files" name="files" multiple>
-        </br>
-        <button>Upload</button>
-    </div>
-    </form>
     '''
 
     response_content_nothing_found = u'''
@@ -281,10 +293,78 @@ class FolderHandler(tornado.web.RequestHandler):
     </table>
     '''
 
+    mp_response_content_table_header = u'''
+    <table style="width:100%;text-align: center">
+    '''
+
+    mp_response_content_table_image_item_template = u'''
+        <td>
+            <a href="{}"><img src="{}" width="{}"></a>
+            <a href="{}">{}</a>
+            <br/>
+            <p>
+            Type: {}<br/>
+            Modified:{}<br/>
+            Size: {}
+            </p>
+        </td>
+    '''
+
+    mp_response_content_table_audio_item_template = u'''
+        <td>
+            <audio controls>
+                <source src="{}">
+                Your browser does not support the audio tag.
+            </audio>
+            <br/>
+            <a href="{}">{}</a>
+            <p>
+            Type: {}<br/>
+            Modified:{}<br/>
+            Size: {}
+            </p>
+        </td>
+    '''
+
+    mp_response_content_table_video_item_template = u'''
+        <td>
+            <video width="{}" controls>
+                <source src="{}">
+                Your browser does not support the video tag.
+            </video>
+            <br/>
+            <a href="{}">{}</a>
+            <p>
+            Type: {}<br/>
+            Modified:{}<br/>
+            Size: {}
+            </p>
+        </td>
+    '''
+
+    mp_response_content_table_item_template = u'''
+        <td>
+            <a href="{}">{}</a><br/>
+            <p>
+            Type: {}<br/>
+            Modified:{}<br/>
+            Size: {}
+            </p>
+        </td>
+    '''
+
+    mp_response_content_table_footer = u'''
+    </table>
+    '''
+
     response_content_footer = u'''
     <footer>
     <p><a href="https://github.com/walkoncross/tornado-file-server">github repo</a></p>
     </footer>
+    '''
+
+    response_body_endings = u'''
+    </body>
     '''
 
     upload_response_content_header = u'''
@@ -296,7 +376,14 @@ class FolderHandler(tornado.web.RequestHandler):
     <p><em>{}</em> saved into: <em>{}</em></p>
     '''
 
-    def initialize(self, max_items_per_page=50, root_dir=None):
+    def initialize(
+        self, 
+        items_per_page=50, 
+        root_dir=None,
+        view_mode='list',
+        items_per_row=4,
+        image_width=256,
+    ):
         """initialize
         Refer to https://www.tornadoweb.org/en/stable/web.html:
 
@@ -309,8 +396,11 @@ class FolderHandler(tornado.web.RequestHandler):
 
 
         Args:
-            max_items_per_page (int, optional): _description_. Defaults to 50.
+            items_per_page (int, optional): _description_. Defaults to 50.
             root_dir (str, optional): _description_. Defaults to None.
+            view_mode (str, optional): view mode, 'list' or 'preview'. Defaults to 'list'.
+            items_per_row (int, optional): _description_. Defaults to 4.
+            image_width (int, optional): _description_. Defaults to 256.
         """
         self.last_request_uri_path = ''
         self.uri_path = '/'
@@ -329,7 +419,13 @@ class FolderHandler(tornado.web.RequestHandler):
         self.sub_folder_cnt = 0
 
         self.max_page_id = 1
-        self.max_items_per_page = max_items_per_page
+        self.items_per_page = items_per_page
+
+        assert(view_mode in FolderHandler.view_mode_list)
+        self.view_mode = view_mode
+
+        self.items_per_row = items_per_row
+        self.image_width = image_width
 
         self.update_dir_item_info_list()
 
@@ -439,7 +535,7 @@ class FolderHandler(tornado.web.RequestHandler):
         if self.dir_list_len > 0:
             #logging.info("===>Found {} files/folders".format(self.dir_list_len))
             self.max_page_id = int(math.ceil(
-                self.dir_list_len / float(self.max_items_per_page)))
+                self.dir_list_len / float(self.items_per_page)))
 
             for item in self.dir_list:
                 # print('--> type(item): ', type(item))
@@ -476,8 +572,7 @@ class FolderHandler(tornado.web.RequestHandler):
 
                 # print('--> type(self.request.path): ', type(self.request.path))
 
-                item_uri_path = tornado.escape.url_escape(
-                    item_name_utf, plus=True)
+                item_uri_path = tornado.escape.url_escape(item_name_utf, plus=False)
                 # print('--> type(item_uri_path): ', type(item_uri_path))
                 # print(item_uri_path)
                 # item_uri_path = item
@@ -497,6 +592,155 @@ class FolderHandler(tornado.web.RequestHandler):
                     (item_uri_path, item_name_utf,
                      file_type, modify_time, file_size)
                 )
+
+    def get_response_content_table_in_list_mode(self, start_idx, end_idx):
+        """get_response_content_table_in_list_mode
+
+        Args:
+            start_idx (int): _description_
+            end_idx (int): _description_
+
+        Returns:
+            str: _description_
+        """
+        response_content_table = FolderHandler.response_content_table_header
+
+        for ii in range(start_idx, end_idx):
+            item_info = self.dir_item_info_list[ii]
+            # logging.info(
+            #     u'item_info: {}'.format(item_info)
+            # )
+
+            # for ii,info in enumerate(item_info):
+            #     print('item_info[{}]: ', ii)
+            #     print('type:', type(info))
+            #     print(info)
+
+            response_content_table += FolderHandler.response_content_table_item_template.format(
+                # unicode(item_info[0]),
+                # unicode(item_info[1]),
+                # unicode(item_info[2]),
+                # unicode(item_info[3]),
+                # unicode(item_info[4])
+                item_info[0],
+                item_info[1],
+                item_info[2],
+                item_info[3],
+                item_info[4]
+            )
+
+        response_content_table += FolderHandler.response_content_table_footer
+
+        return response_content_table
+
+    def get_response_content_table_in_preview_mode(self, start_idx, end_idx):
+        """get_response_content_table_in_preview_mode
+
+        Args:
+            start_idx (int): _description_
+            end_idx (int): _description_
+
+        Returns:
+            str: _description_
+        """
+        
+        response_content_table = FolderHandler.mp_response_content_table_header
+
+        table_row = ""
+        items_per_row = self.items_per_row
+        print('items_per_row: ', items_per_row)
+        add_row_header = True
+        # add_row_footer = True
+
+        for ii in range(start_idx, end_idx):
+            item_info = self.dir_item_info_list[ii]
+            # logging.info(
+            #     u'item_info: {}'.format(item_info)
+            # )
+
+            # for ii,info in enumerate(item_info):
+            #     print('item_info[{}]: ', ii)
+            #     print('type:', type(info))
+            #     print(info)
+            if add_row_header:
+                table_row = "<tr>"
+                add_row_header = False
+
+            if is_an_image(item_info[0]):
+                table_row += FolderHandler.mp_response_content_table_image_item_template.format(
+                    # unicode(item_info[0]),
+                    # unicode(item_info[1]),
+                    # unicode(item_info[2]),
+                    # unicode(item_info[3]),
+                    # unicode(item_info[4])
+                    item_info[0],
+                    item_info[0],
+                    self.image_width,
+                    item_info[0],
+                    item_info[1],
+                    item_info[2],
+                    item_info[3],
+                    item_info[4]
+                )
+            elif is_supported_audio(item_info[0]):
+                table_row += FolderHandler.mp_response_content_table_audio_item_template.format(
+                    # unicode(item_info[0]),
+                    # unicode(item_info[1]),
+                    # unicode(item_info[2]),
+                    # unicode(item_info[3]),
+                    # unicode(item_info[4])
+                    item_info[0],
+                    item_info[0],
+                    item_info[1],
+                    item_info[2],
+                    item_info[3],
+                    item_info[4]
+                )
+            elif is_supported_video(item_info[0]):
+                table_row += FolderHandler.mp_response_content_table_video_item_template.format(
+                    # unicode(item_info[0]),
+                    # unicode(item_info[1]),
+                    # unicode(item_info[2]),
+                    # unicode(item_info[3]),
+                    # unicode(item_info[4])
+                    self.image_width,
+                    item_info[0],
+                    item_info[0],
+                    item_info[1],
+                    item_info[2],
+                    item_info[3],
+                    item_info[4]
+                )
+            else:
+                table_row += FolderHandler.mp_response_content_table_item_template.format(
+                    # unicode(item_info[0]),
+                    # unicode(item_info[1]),
+                    # unicode(item_info[2]),
+                    # unicode(item_info[3]),
+                    # unicode(item_info[4])
+                    item_info[0],
+                    item_info[1],
+                    item_info[2],
+                    item_info[3],
+                    item_info[4]
+                )
+
+            if (ii - start_idx + 1) % items_per_row == 0:
+                table_row += "</tr>"
+                add_row_header = True
+
+                response_content_table += table_row
+
+        if ii > start_idx and (ii - start_idx + 1) % items_per_row > 0:
+            table_row += "</tr>"
+            add_row_header = True
+
+            response_content_table += table_row
+
+
+        response_content_table += FolderHandler.mp_response_content_table_footer
+
+        return response_content_table
 
     def get(self, path):
         """get method
@@ -520,6 +764,14 @@ class FolderHandler(tornado.web.RequestHandler):
             u'GET folder uri: {}'.format(self.request.uri)
         )
 
+        # print('===> request.uri: ', self.request.uri)
+        # print('===> request.path: ', self.request.path)
+        # print('===> request.arguments: ', self.request.arguments)
+        # print('===> type(request.arguments): ', type(self.request.arguments))
+
+        # for kk, vv in self.request.arguments.items():
+        #     print('type(kk): {}, type(vv): {}', type(kk), type(vv))
+
         if self.request.path != self.last_request_uri_path:
             logging.info(
                 u'===> Last request uri path: {}'.format(
@@ -535,6 +787,16 @@ class FolderHandler(tornado.web.RequestHandler):
                 self.update_dir_item_info_list()
 
         page_id = self.get_query_argument(name="page_id", default='1')
+        view_mode = self.get_query_argument(name="view_mode", default=self.view_mode)
+
+        if view_mode not in FolderHandler.view_mode_list:
+            view_mode = self.view_mode
+
+        switch_mode = ''
+        for mode in FolderHandler.view_mode_list:
+            if mode != view_mode:
+                switch_mode = mode
+                break
 
         logging.info(
             u'page_id: {}'.format(page_id)
@@ -556,10 +818,25 @@ class FolderHandler(tornado.web.RequestHandler):
             u'page_id after check: {}'.format(page_id)
         )
 
-        response_content = FolderHandler.response_content_header_template.format(
+        response_content = FolderHandler.response_body_beginnings 
+        response_content += FolderHandler.response_content_header_template.format(
             tornado.escape.url_unescape(self.uri_path))
         response_content += FolderHandler.response_content_navi_parent_template.format(
             self.parent_uri_path)
+
+        switch_mode_arguments = {}
+        # switch_mode_arguments = self.request.arguments.copy()
+        switch_mode_arguments['view_mode'] = switch_mode
+        if 'page_id' in self.request.arguments:
+            switch_mode_arguments['page_id'] = int(self.request.arguments['page_id'][0])
+
+        switch_mode_url = self.request.path + '?' + urlencode(switch_mode_arguments)
+
+        response_content += FolderHandler.response_content_view_mode_template.format(
+                                view_mode,
+                                switch_mode_url,
+                                switch_mode
+                            )
         response_content += FolderHandler.response_content_upload_form
 
         if self.dir_list_len < 1:
@@ -570,7 +847,7 @@ class FolderHandler(tornado.web.RequestHandler):
                 self.dir_list_len,
                 self.dir_list_len - self.sub_folder_cnt,
                 self. sub_folder_cnt,
-                self.max_items_per_page,
+                self.items_per_page,
                 self.max_page_id
             )
 
@@ -580,7 +857,8 @@ class FolderHandler(tornado.web.RequestHandler):
                 content_navi += FolderHandler.response_content_navi_prev_nohref
             else:
                 content_navi += FolderHandler.response_content_navi_prev_template.format(
-                    self.request.path+'?page_id='+str(prev_page_id))
+                    self.request.path + '?page_id={}&view_mode={}'.format(prev_page_id, view_mode)
+                )
 
             content_navi += FolderHandler.response_content_navi_up_template.format(
                 self.parent_uri_path)
@@ -590,40 +868,19 @@ class FolderHandler(tornado.web.RequestHandler):
                 content_navi += FolderHandler.response_content_navi_next_nohref
             else:
                 content_navi += FolderHandler.response_content_navi_next_template.format(
-                    self.request.path+'?page_id='+str(next_page_id))
+                    self.request.path + '?page_id={}&view_mode={}'.format(next_page_id, view_mode)
+                )
 
             response_content += content_navi
             #logging.info(u"===>Found {} files/folders".format(self.dir_list_len))
-            response_content_table = FolderHandler.response_content_table_header
+ 
+            start_idx = self.items_per_page * (page_id-1)
+            end_idx = min(self.items_per_page * page_id, self.dir_list_len)
 
-            start_idx = self.max_items_per_page * (page_id-1)
-            end_idx = min(self.max_items_per_page * page_id, self.dir_list_len)
-
-            for i in range(start_idx, end_idx):
-                item_info = self.dir_item_info_list[i]
-                # logging.info(
-                #     u'item_info: {}'.format(item_info)
-                # )
-
-                # for ii,info in enumerate(item_info):
-                #     print('item_info[{}]: ', ii)
-                #     print('type:', type(info))
-                #     print(info)
-
-                response_content_table += FolderHandler.response_content_table_item_template.format(
-                    # unicode(item_info[0]),
-                    # unicode(item_info[1]),
-                    # unicode(item_info[2]),
-                    # unicode(item_info[3]),
-                    # unicode(item_info[4])
-                    item_info[0],
-                    item_info[1],
-                    item_info[2],
-                    item_info[3],
-                    item_info[4]
-                )
-
-            response_content_table += FolderHandler.response_content_table_footer
+            if view_mode == 'preview':
+                response_content_table = self.get_response_content_table_in_preview_mode(start_idx, end_idx)            
+            else:
+                response_content_table = self.get_response_content_table_in_list_mode(start_idx, end_idx)
             response_content += response_content_table
 
             # response_content += FolderHandler.response_content_upload_form
@@ -631,6 +888,7 @@ class FolderHandler(tornado.web.RequestHandler):
                 response_content += content_navi
 
         response_content += FolderHandler.response_content_footer
+        response_content += FolderHandler.response_body_endings
 
         self.last_request_uri_path = self.request.path
 
@@ -750,20 +1008,31 @@ class FolderHandler(tornado.web.RequestHandler):
 #    tornado.ioloop.IOLoop.instance().start()
 
 
-def start_server(root_dir, port=8899, max_items=50):
+def start_server(
+    root_dir, 
+    port=8900, 
+    items_per_page=50,
+    view_mode='list',
+    items_per_row=4,
+    image_width=256
+):
     """start_server
 
     Args:
-        root_dir (str): root dir of file server
-        port (int, optional): address port. Defaults to 8899.
-        max_items (int, optional): max items per page. Defaults to 50.
+        root_dir (str): root dir to start serving
+        port (int, optional): Defaults to 8900.
+        items_per_page (int, optional): Defaults to 50.
+        view_mode (str): view mode, ['list', 'preview']. Default: 'list'".
+        items_per_row (int, optional): Defaults to 4.
+        image_width (int, optional): Defaults to 256.
     """
+
     if not isinstance(root_dir, unicode):
         raise(AssertionError("In start_server: root_dir must be of type Unicode"))
 
     ip = get_ip()
     server_url = u"{}:{}".format(ip, port)
-    print('===> tornado file server url: \n', server_url)
+    print(u'===> tornado file server url: {} or localhost:{}'.format(server_url, port))
 
     logging.info(
         u'===> tornado file server url: {} or localhost:{}'.format(server_url, port)
@@ -780,11 +1049,19 @@ def start_server(root_dir, port=8899, max_items=50):
 
     folder_app = tornado.web.Application(
         [
-            (path, FolderHandler, {
-             "max_items_per_page": max_items, "root_dir": root_dir}),
+            (
+                path, FolderHandler,  {
+                    "items_per_page": items_per_page, 
+                    "root_dir": root_dir,
+                    "view_mode": view_mode,
+                    "items_per_row": items_per_row,
+                    "image_width": image_width
+                }
+            ),
         ],
         debug=True
     )
+
 
     error_app = tornado.web.Application(
         [

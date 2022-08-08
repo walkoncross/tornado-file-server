@@ -9,26 +9,25 @@ if [[ $# -gt 0 ]]; then
     root_dir=$1
 fi
 
-port=8899
+view_mode=preview
+port=8900
 items_per_page=50
+items_per_row=4
+image_width=256
 
 ip=`python -m tornado_file_server.get_ip`
 
 echo "root_dir: $root_dir"
-echo "ip: $ip"
-echo "port: $port"
-echo "max_items: $max_items"
+echo "IP: $ip"
+echo "Port: $port"
 
 echo "===> Open your browser and input: $ip:$port or localhost:$port"
-# nohup python3 tornado_file_server.py 
-#     --log-file-prefix=./log 
-#     --port=$port \
-#     --max-items=$max_items \
-#     $root_dir \
-#     &
 
-nohup python -m tornado_file_server.serving \
+python -m tornado_file_server.serving \
     --port $port \
     --items-per-page $items_per_page \
+    --view-mode $view_mode \
+    --items-per-row $items_per_row \
+    --image-width $image_width \
     $root_dir \
     & # run in background
