@@ -13,9 +13,11 @@
    2. Audio/video files can be played through audio/video players.
 
 ## Sceenshot
+[list mode](https://github.com/walkoncross/tornado-file-server/blob/master/screenshot_in_list_mode.jpg) 
+![list mode](./screenshot_in_list_mode.jpg) 
 
-![Screenshot](./screenshot_for_tornado_file_server.png) 
-[Screenshot](https://github.com/walkoncross/tornado-file-server/blob/master/screenshot_for_tornado_file_server.png) 
+[preview mode](https://github.com/walkoncross/tornado-file-server/blob/master/screenshot_in_preview_mode.jpg) 
+![preview mode](./screenshot_in_preview_mode.jpg) 
 
 ## Python version
 
